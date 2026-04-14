@@ -6,7 +6,7 @@ function Tabs({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Root>) {
-  return <TabsPrimitive.Root className={cn("flex flex-col gap-4", className)} {...props} />;
+  return <TabsPrimitive.Root className={cn("flex w-fit flex-col gap-4", className)} {...props} />;
 }
 
 function TabsList({
@@ -16,7 +16,7 @@ function TabsList({
   return (
     <TabsPrimitive.List
       className={cn(
-        "inline-flex h-11 items-center justify-center rounded-xl bg-[var(--muted)] p-1 text-[var(--muted-foreground)]",
+        "inline-flex h-11 w-fit items-center justify-start rounded-xl bg-[var(--muted)] p-1 text-[var(--muted-foreground)]",
         className,
       )}
       {...props}
