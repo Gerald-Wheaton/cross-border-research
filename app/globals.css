@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+  --font-sans: "Avenir Next", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --background: #f7f3eb;
+  --foreground: #1f1d1a;
+  --card: rgba(255, 252, 247, 0.88);
+  --card-foreground: #1f1d1a;
+  --popover: #fffdf9;
+  --popover-foreground: #1f1d1a;
+  --primary: #0f6a5b;
+  --primary-foreground: #f8fffd;
+  --secondary: #e7dccd;
+  --secondary-foreground: #302722;
+  --muted: #e9e1d5;
+  --muted-foreground: #6f655d;
+  --accent: #ead9bd;
+  --accent-foreground: #2f271f;
+  --destructive: #a8402b;
+  --border: rgba(88, 70, 52, 0.14);
+  --input: rgba(88, 70, 52, 0.16);
+  --ring: rgba(15, 106, 91, 0.35);
+  --radius: 1rem;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(15, 106, 91, 0.16), transparent 26%),
+    radial-gradient(circle at top right, rgba(191, 134, 54, 0.16), transparent 24%),
+    linear-gradient(180deg, #faf6ee 0%, #f2e9db 100%);
+  color: var(--foreground);
+}
+
+::selection {
+  background: rgba(15, 106, 91, 0.18);
+}
+
+.surface-glass {
+  background: var(--card);
+  backdrop-filter: blur(12px);
+}
