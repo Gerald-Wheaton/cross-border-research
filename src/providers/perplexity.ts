@@ -67,6 +67,7 @@ export class PerplexityResearchProvider implements ResearchProvider {
       body: JSON.stringify({
         model: this.config.perplexityModel,
         temperature: 0.1,
+        search_mode: "web",
         messages: [
           {
             role: "system",
@@ -78,14 +79,9 @@ export class PerplexityResearchProvider implements ResearchProvider {
             content: buildFieldPrompt(input, allowedDomains),
           },
         ],
-        tools: [
-          {
-            type: "web_search",
-            filters: {
-              search_domain_filter: allowedDomains,
-            },
-          },
-        ],
+        web_search_options: {
+          search_domain_filter: allowedDomains,
+        },
       }),
     };
 

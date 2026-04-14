@@ -13,7 +13,7 @@ export function getAllowedDomains(jurisdiction: SupportedJurisdiction): string[]
     return ["irs.gov", "usa.gov"];
   }
 
-  return ["incometaxindia.gov.in"];
+  return ["incometaxindia.gov.in", "rbi.org.in"];
 }
 
 export function formatVerificationResult(result: VerificationResult): string {

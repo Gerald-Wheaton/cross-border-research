@@ -3,7 +3,12 @@ import { getAppRuntime } from "@/src/runtime";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+interface RulePageProps {
+  params: Promise<{ ruleId: string }>;
+}
+
+export default async function RulePage({ params }: RulePageProps) {
+  const { ruleId } = await params;
   const runtime = getAppRuntime();
   await runtime.db.ensureRuleAiGenerationTable();
 
@@ -18,7 +23,7 @@ export default async function HomePage() {
     <DashboardClient
       initialRules={rules}
       initialJob={jobState}
-      initialRuleId={null}
+      initialRuleId={decodeURIComponent(ruleId)}
       provider={{
         name: runtime.provider.name,
         ready: readiness.ready,

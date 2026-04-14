@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AlertCircle, LoaderCircle, Play, RefreshCcw, Square } from "lucide-react";
 import {
   runSingleRuleAction,
@@ -24,6 +25,7 @@ interface ProviderInfo {
 interface DashboardClientProps {
   initialRules: ReviewRuleRow[];
   initialJob: JobState;
+  initialRuleId: string | null;
   provider: ProviderInfo;
 }
 
@@ -36,12 +38,21 @@ const FIELD_OPTIONS: Array<{ key: TargetField; label: string }> = [
 export function DashboardClient({
   initialRules,
   initialJob,
+  initialRuleId,
   provider,
 }: DashboardClientProps) {
+  const router = useRouter();
   const [rules, setRules] = useState(initialRules);
   const [job, setJob] = useState(initialJob);
   const [search, setSearch] = useState("");
-  const [selectedRuleId, setSelectedRuleId] = useState(initialRules[0]?.rule_id ?? null);
+  const [selectedRuleId, setSelectedRuleId] = useState(
+    initialRuleId ?? initialRules[0]?.rule_id ?? null,
+  );
+
+  function selectRule(ruleId: string) {
+    setSelectedRuleId(ruleId);
+    router.replace(`/${encodeURIComponent(ruleId)}`);
+  }
   const [selectedField, setSelectedField] = useState<TargetField>("trigger_condition");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -238,7 +249,7 @@ export function DashboardClient({
                   <button
                     key={rule.rule_id}
                     type="button"
-                    onClick={() => setSelectedRuleId(rule.rule_id)}
+                    onClick={() => selectRule(rule.rule_id)}
                     className={`w-full rounded-[1.2rem] border px-4 py-4 text-left transition ${
                       isActive
                         ? "border-emerald-700/25 bg-emerald-900/[0.04] shadow-sm"
