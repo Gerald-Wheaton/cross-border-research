@@ -8,6 +8,10 @@ import type {
 import { assertSupportedJurisdiction, getAllowedDomains } from "./research";
 
 const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+
+type FetchLike = typeof fetch;
+type SleepFn = (ms: number) => Promise<void>;
 
 interface PerplexityMessage {
   content?: unknown;
@@ -33,7 +37,11 @@ interface ParsedPerplexityResult {
 export class PerplexityResearchProvider implements ResearchProvider {
   readonly name = "perplexity";
 
-  constructor(private readonly config: AppConfig) {}
+  constructor(
+    private readonly config: AppConfig,
+    private readonly fetchImpl: FetchLike = fetch,
+    private readonly sleep: SleepFn = defaultSleep,
+  ) {}
 
   getReadiness(): ProviderReadiness {
     if (!this.config.perplexityApiKey) {
@@ -58,69 +66,138 @@ export class PerplexityResearchProvider implements ResearchProvider {
     const jurisdiction = assertSupportedJurisdiction(input.rule.jurisdiction_id);
     const allowedDomains = getAllowedDomains(jurisdiction);
 
-    const requestInit: RequestInit = {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.config.perplexityApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.config.perplexityModel,
-        temperature: 0.1,
-        search_mode: "web",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a tax verification assistant. Use only the allowed official domains and respond with valid JSON only.",
-          },
-          {
-            role: "user",
-            content: buildFieldPrompt(input, allowedDomains),
-          },
-        ],
-        web_search_options: {
-          search_domain_filter: allowedDomains,
+    const requestBody = JSON.stringify({
+      model: this.config.perplexityModel,
+      temperature: 0.1,
+      search_mode: "web",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a tax verification assistant. Use only the allowed official domains and respond with valid JSON only.",
         },
-      }),
-    };
+        {
+          role: "user",
+          content: buildFieldPrompt(input, allowedDomains),
+        },
+      ],
+      web_search_options: {
+        search_domain_filter: allowedDomains,
+      },
+    });
 
-    if (options?.signal) {
-      requestInit.signal = options.signal;
+    const maxAttempts = Math.max(1, this.config.perplexityMaxRetries + 1);
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const timeoutController = new AbortController();
+      const timeoutId = setTimeout(() => {
+        timeoutController.abort(new Error("Perplexity request timed out."));
+      }, this.config.perplexityTimeoutMs);
+
+      const cleanup = linkAbortSignals(options?.signal, timeoutController);
+
+      try {
+        const response = await this.fetchImpl(PERPLEXITY_API_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.config.perplexityApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: requestBody,
+          signal: timeoutController.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          const error = new Error(`Perplexity API error ${response.status}: ${errorText}`);
+          if (attempt < maxAttempts && RETRYABLE_STATUS_CODES.has(response.status)) {
+            await this.sleep(getRetryDelayMs(attempt));
+            continue;
+          }
+          throw error;
+        }
+
+        const payload = (await response.json()) as PerplexityResponseBody;
+        const content = payload.choices?.[0]?.message?.content;
+        if (typeof content !== "string" || !content.trim()) {
+          throw new Error("Perplexity response did not include message content.");
+        }
+
+        const parsed = parsePerplexityJson(content);
+        if (!parsed) {
+          throw new Error(
+            `Perplexity returned non-JSON content for ${input.rule.rule_id} ${input.fieldName}.`,
+          );
+        }
+
+        return {
+          revisedText: typeof parsed.revised_text === "string" ? parsed.revised_text.trim() : "",
+          verdict: normalizeVerdict(parsed.verdict),
+          authority: typeof parsed.authority === "string" ? parsed.authority.trim() : "",
+          sourceUrls: Array.isArray(parsed.source_urls)
+            ? parsed.source_urls.map((item) => String(item).trim()).filter(Boolean)
+            : [],
+          explanation: typeof parsed.explanation === "string" ? parsed.explanation.trim() : "",
+          needsClarification:
+            typeof parsed.needs_clarification === "string" ? parsed.needs_clarification.trim() : "",
+        };
+      } catch (error) {
+        if (isAbortError(error)) {
+          const abortReason = options?.signal?.aborted
+            ? options.signal.reason
+            : new Error("Perplexity request timed out.");
+          throw abortReason instanceof Error ? abortReason : new Error(String(abortReason));
+        }
+
+        if (attempt < maxAttempts && isRetryableError(error)) {
+          await this.sleep(getRetryDelayMs(attempt));
+          continue;
+        }
+
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+        cleanup();
+      }
     }
 
-    const response = await fetch(PERPLEXITY_API_URL, requestInit);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Perplexity API error ${response.status}: ${errorText}`);
-    }
-
-    const payload = (await response.json()) as PerplexityResponseBody;
-    const content = payload.choices?.[0]?.message?.content;
-    if (typeof content !== "string" || !content.trim()) {
-      throw new Error("Perplexity response did not include message content.");
-    }
-
-    const parsed = parsePerplexityJson(content);
-    if (!parsed) {
-      throw new Error(
-        `Perplexity returned non-JSON content for ${input.rule.rule_id} ${input.fieldName}.`,
-      );
-    }
-
-    return {
-      revisedText: typeof parsed.revised_text === "string" ? parsed.revised_text.trim() : "",
-      verdict: normalizeVerdict(parsed.verdict),
-      authority: typeof parsed.authority === "string" ? parsed.authority.trim() : "",
-      sourceUrls: Array.isArray(parsed.source_urls)
-        ? parsed.source_urls.map((item) => String(item).trim()).filter(Boolean)
-        : [],
-      explanation: typeof parsed.explanation === "string" ? parsed.explanation.trim() : "",
-      needsClarification:
-        typeof parsed.needs_clarification === "string" ? parsed.needs_clarification.trim() : "",
-    };
+    throw new Error("Perplexity request failed after retries.");
   }
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRetryDelayMs(attempt: number): number {
+  return Math.min(1_000 * 2 ** (attempt - 1), 5_000);
+}
+
+function linkAbortSignals(parentSignal: AbortSignal | undefined, childController: AbortController): () => void {
+  if (!parentSignal) {
+    return () => {};
+  }
+
+  if (parentSignal.aborted) {
+    childController.abort(parentSignal.reason);
+    return () => {};
+  }
+
+  const onAbort = () => childController.abort(parentSignal.reason);
+  parentSignal.addEventListener("abort", onAbort, { once: true });
+  return () => parentSignal.removeEventListener("abort", onAbort);
+}
+
+function isAbortError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /Perplexity API error (408|429|500|502|503|504):/.test(error.message);
 }
 
 function buildFieldPrompt(input: VerifyFieldInput, allowedDomains: string[]): string {

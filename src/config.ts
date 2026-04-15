@@ -4,6 +4,8 @@ export interface AppConfig {
   dbMaxConnections: number;
   perplexityApiKey: string | null;
   perplexityModel: string;
+  perplexityTimeoutMs: number;
+  perplexityMaxRetries: number;
 }
 
 function requireEnv(name: string): string {
@@ -30,5 +32,7 @@ export function loadConfig(): AppConfig {
     dbMaxConnections: parseNumber(process.env.DB_MAX_CONNECTIONS, 4),
     perplexityApiKey: process.env.PERPLEXITY_API_KEY?.trim() || null,
     perplexityModel: process.env.PERPLEXITY_MODEL?.trim() || "sonar-pro",
+    perplexityTimeoutMs: parseNumber(process.env.PERPLEXITY_TIMEOUT_MS, 45_000),
+    perplexityMaxRetries: parseNumber(process.env.PERPLEXITY_MAX_RETRIES, 2),
   };
 }

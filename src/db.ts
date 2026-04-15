@@ -11,6 +11,7 @@ export interface Database {
   fetchRulesForReview(): Promise<ReviewRuleRow[]>;
   fetchSourceRules(ruleIds?: string[] | null): Promise<RuleRow[]>;
   syncAiRowFromSource(ruleId: string): Promise<void>;
+  ensureAiRowFromSource(ruleId: string): Promise<void>;
   getExistingAiValue(ruleId: string, fieldName: TargetField): Promise<string | null>;
   updateAiField(ruleId: string, fieldName: TargetField, fieldValue: string): Promise<void>;
   close(): Promise<void>;
@@ -150,6 +151,51 @@ export function createDatabase(config: AppConfig): Database {
     `;
   }
 
+  async function ensureAiRowFromSource(ruleId: string): Promise<void> {
+    await sql`
+      insert into public.rule_ai_generation (
+        rule_id,
+        name,
+        jurisdiction_id,
+        section,
+        category,
+        trigger_condition,
+        calculation_outcome,
+        legal_source,
+        edge_cases,
+        notes_for_platform,
+        last_verified,
+        verification_status,
+        logic_category
+      )
+      select
+        rule_id,
+        name,
+        jurisdiction_id,
+        section,
+        category,
+        null::text as trigger_condition,
+        calculation_outcome,
+        null::text as legal_source,
+        null::text as edge_cases,
+        notes_for_platform,
+        last_verified,
+        verification_status,
+        logic_category
+      from public.rule
+      where rule_id = ${ruleId}
+      on conflict (rule_id) do update
+      set
+        name = excluded.name,
+        jurisdiction_id = excluded.jurisdiction_id,
+        section = excluded.section,
+        category = excluded.category,
+        calculation_outcome = excluded.calculation_outcome,
+        notes_for_platform = excluded.notes_for_platform,
+        logic_category = excluded.logic_category
+    `;
+  }
+
   async function getExistingAiValue(ruleId: string, fieldName: TargetField): Promise<string | null> {
     const fieldIdentifier = sql(fieldName);
     const rows = await sql<ExistingAiValueRow[]>`
@@ -181,6 +227,7 @@ export function createDatabase(config: AppConfig): Database {
     fetchRulesForReview,
     fetchSourceRules,
     syncAiRowFromSource,
+    ensureAiRowFromSource,
     getExistingAiValue,
     updateAiField,
     close,

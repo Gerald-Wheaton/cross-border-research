@@ -5,7 +5,8 @@
     "build": "next build --webpack",
     "dev": "next dev --webpack",
     "start": "next start",
-    "check-types": "next typegen && tsc --noEmit -p tsconfig.json"
+    "check-types": "next typegen && tsc --noEmit -p tsconfig.json",
+    "test": "bun test"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",

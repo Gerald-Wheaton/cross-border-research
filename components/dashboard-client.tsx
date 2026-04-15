@@ -51,7 +51,7 @@ export function DashboardClient({
 
   function selectRule(ruleId: string) {
     setSelectedRuleId(ruleId);
-    router.replace(`/${encodeURIComponent(ruleId)}`);
+    router.replace(`/${encodeURIComponent(ruleId)}`, { scroll: false });
   }
   const [selectedField, setSelectedField] = useState<TargetField>("trigger_condition");
   const [actionMessage, setActionMessage] = useState<string | null>(null);

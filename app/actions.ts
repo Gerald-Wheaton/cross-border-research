@@ -22,7 +22,7 @@ async function startJob(ruleIds: string[] | null): Promise<ActionResult> {
 
   void runtime.jobs
     .start({
-      overwrite: true,
+      overwrite: false,
       ruleIds,
     })
     .catch((error: unknown) => {

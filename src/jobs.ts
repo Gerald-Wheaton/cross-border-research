@@ -66,15 +66,19 @@ export class VerificationJobService {
       throw new Error(readiness.message);
     }
 
-    const rules = await this.db.fetchSourceRules(input.ruleIds);
     this.resetState({
-      totalRules: rules.length,
-      totalFieldRuns: rules.length * TARGET_FIELDS.length,
+      totalRules: 0,
+      totalFieldRuns: 0,
       overwrite: input.overwrite,
     });
-    this.addLog(`Starting verification job for ${rules.length} rule(s).`);
+    this.addLog("Preparing verification job.");
 
     try {
+      const rules = await this.db.fetchSourceRules(input.ruleIds);
+      this.state.totalRules = rules.length;
+      this.state.totalFieldRuns = rules.length * TARGET_FIELDS.length;
+      this.addLog(`Starting verification job for ${rules.length} rule(s).`);
+
       for (const rule of rules) {
         if (this.cancelRequested) {
           this.finishCancelledState();
@@ -86,6 +90,8 @@ export class VerificationJobService {
 
         if (input.overwrite) {
           await this.db.syncAiRowFromSource(rule.rule_id);
+        } else {
+          await this.db.ensureAiRowFromSource(rule.rule_id);
         }
 
         for (const fieldName of TARGET_FIELDS) {
@@ -105,7 +111,7 @@ export class VerificationJobService {
 
           if (!input.overwrite) {
             const existingValue = await this.db.getExistingAiValue(rule.rule_id, fieldName);
-            if (existingValue && existingValue.trim()) {
+            if (this.hasVerifiedAiValue(existingValue)) {
               this.state.skippedFieldRuns += 1;
               this.addLog(`Skipped ${rule.rule_id}.${fieldName} because an AI value already exists.`);
               continue;
@@ -115,10 +121,6 @@ export class VerificationJobService {
           this.addLog(`Verifying ${rule.rule_id}.${fieldName}.`);
 
           try {
-            if (!input.overwrite) {
-              await this.db.syncAiRowFromSource(rule.rule_id);
-            }
-
             this.activeAbortController = new AbortController();
             const result = await this.provider.verifyField({
               rule,
@@ -238,5 +240,14 @@ export class VerificationJobService {
 
   private isAbortError(error: unknown): boolean {
     return error instanceof Error && error.name === "AbortError";
+  }
+
+  private hasVerifiedAiValue(value: string | null): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.startsWith("Verified text:") && trimmed.includes("Verdict:");
   }
 }
